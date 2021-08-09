@@ -5,229 +5,269 @@
 import UIKit
 
 class ListViewController: UITableViewController {
-	var items = [Any]()
+    var items = [Any]()
 	
-	var retryCount = 0
-	var maxRetryCount = 0
-	var shouldRetry = false
+    var retryCount = 0
+    var maxRetryCount = 0
+    var shouldRetry = false
 	
-	var longDateStyle = false
+    var longDateStyle = false
 	
-	var fromReceivedTransfersScreen = false
-	var fromSentTransfersScreen = false
-	var fromCardsScreen = false
-	var fromFriendsScreen = false
+    var fromReceivedTransfersScreen = false
+    var fromSentTransfersScreen = false
+    var fromCardsScreen = false
+    var fromFriendsScreen = false
 	
-	override func viewDidLoad() {
-		super.viewDidLoad()
+    override func viewDidLoad() {
+        super.viewDidLoad()
 		
-		refreshControl = UIRefreshControl()
-		refreshControl?.addTarget(self, action: #selector(refresh), for: .valueChanged)
+        refreshControl = UIRefreshControl()
+        refreshControl?.addTarget(self, action: #selector(refresh), for: .valueChanged)
 		
-		if fromFriendsScreen {
-			shouldRetry = true
-			maxRetryCount = 2
+        if fromFriendsScreen {
+            shouldRetry = true
+            maxRetryCount = 2
 			
-			title = "Friends"
+            title = "Friends"
 			
-			navigationItem.rightBarButtonItem = UIBarButtonItem(barButtonSystemItem: .add, target: self, action: #selector(addFriend))
+            navigationItem.rightBarButtonItem = UIBarButtonItem(barButtonSystemItem: .add, target: self, action: #selector(addFriend))
 			
-		} else if fromCardsScreen {
-			shouldRetry = false
+        } else if fromCardsScreen {
+            shouldRetry = false
 			
-			title = "Cards"
+            title = "Cards"
 			
-			navigationItem.rightBarButtonItem = UIBarButtonItem(barButtonSystemItem: .add, target: self, action: #selector(addCard))
+            navigationItem.rightBarButtonItem = UIBarButtonItem(barButtonSystemItem: .add, target: self, action: #selector(addCard))
 			
-		} else if fromSentTransfersScreen {
-			shouldRetry = true
-			maxRetryCount = 1
-			longDateStyle = true
+        } else if fromSentTransfersScreen {
+            shouldRetry = true
+            maxRetryCount = 1
+            longDateStyle = true
 
-			navigationItem.title = "Sent"
-			navigationItem.rightBarButtonItem = UIBarButtonItem(title: "Send", style: .done, target: self, action: #selector(sendMoney))
+            navigationItem.title = "Sent"
+            navigationItem.rightBarButtonItem = UIBarButtonItem(title: "Send", style: .done, target: self, action: #selector(sendMoney))
 
-		} else if fromReceivedTransfersScreen {
-			shouldRetry = true
-			maxRetryCount = 1
-			longDateStyle = false
+        } else if fromReceivedTransfersScreen {
+            shouldRetry = true
+            maxRetryCount = 1
+            longDateStyle = false
 			
-			navigationItem.title = "Received"
-			navigationItem.rightBarButtonItem = UIBarButtonItem(title: "Request", style: .done, target: self, action: #selector(requestMoney))
-		}
-	}
+            navigationItem.title = "Received"
+            navigationItem.rightBarButtonItem = UIBarButtonItem(title: "Request", style: .done, target: self, action: #selector(requestMoney))
+        }
+    }
 	
-	override func viewWillAppear(_ animated: Bool) {
-		super.viewWillAppear(animated)
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
 		
-		if tableView.numberOfRows(inSection: 0) == 0 {
-			refresh()
-		}
-	}
+        if tableView.numberOfRows(inSection: 0) == 0 {
+            refresh()
+        }
+    }
 	
-	@objc private func refresh() {
-		refreshControl?.beginRefreshing()
-		if fromFriendsScreen {
-			FriendsAPI.shared.loadFriends { [weak self] result in
-				DispatchQueue.mainAsyncIfNeeded {
-					self?.handleAPIResult(result)
-				}
-			}
-		} else if fromCardsScreen {
-			CardAPI.shared.loadCards { [weak self] result in
-				DispatchQueue.mainAsyncIfNeeded {
-					self?.handleAPIResult(result)
-				}
-			}
-		} else if fromSentTransfersScreen || fromReceivedTransfersScreen {
-			TransfersAPI.shared.loadTransfers { [weak self] result in
-				DispatchQueue.mainAsyncIfNeeded {
-					self?.handleAPIResult(result)
-				}
-			}
-		} else {
-			fatalError("unknown context")
-		}
-	}
+    @objc private func refresh() {
+        refreshControl?.beginRefreshing()
+        if fromFriendsScreen {
+            FriendsAPI.shared.loadFriends { [weak self] result in
+                DispatchQueue.mainAsyncIfNeeded {
+                    self?.handleAPIResult(result)
+                }
+            }
+        } else if fromCardsScreen {
+            CardAPI.shared.loadCards { [weak self] result in
+                DispatchQueue.mainAsyncIfNeeded {
+                    self?.handleAPIResult(result)
+                }
+            }
+        } else if fromSentTransfersScreen || fromReceivedTransfersScreen {
+            TransfersAPI.shared.loadTransfers { [weak self] result in
+                DispatchQueue.mainAsyncIfNeeded {
+                    self?.handleAPIResult(result)
+                }
+            }
+        } else {
+            fatalError("unknown context")
+        }
+    }
 	
-	private func handleAPIResult<T>(_ result: Result<[T], Error>) {
-		switch result {
-		case let .success(items):
-			if fromFriendsScreen && User.shared?.isPremium == true {
-				(UIApplication.shared.connectedScenes.first?.delegate as! SceneDelegate).cache.save(items as! [Friend])
-			}
-			self.retryCount = 0
+    private func handleAPIResult<T>(_ result: Result<[T], Error>) {
+        switch result {
+        case let .success(items):
+            if fromFriendsScreen, User.shared?.isPremium == true {
+                (UIApplication.shared.connectedScenes.first?.delegate as! SceneDelegate).cache.save(items as! [Friend])
+            }
+            retryCount = 0
 			
-			var filteredItems = items as [Any]
-			if let transfers = items as? [Transfer] {
-				if fromSentTransfersScreen {
-					filteredItems = transfers.filter(\.isSender)
-				} else {
-					filteredItems = transfers.filter { !$0.isSender }
-				}
-			}
+            var filteredItems = items as [Any]
+            if let transfers = items as? [Transfer] {
+                if fromSentTransfersScreen {
+                    filteredItems = transfers.filter(\.isSender)
+                } else {
+                    filteredItems = transfers.filter { !$0.isSender }
+                }
+            }
 			
-			self.items = filteredItems
-			self.refreshControl?.endRefreshing()
-			self.tableView.reloadData()
+            self.items = filteredItems
+            refreshControl?.endRefreshing()
+            tableView.reloadData()
 			
-		case let .failure(error):
-			if shouldRetry && retryCount < maxRetryCount {
-				retryCount += 1
+        case let .failure(error):
+            if shouldRetry, retryCount < maxRetryCount {
+                retryCount += 1
 				
-				refresh()
-				return
-			}
+                refresh()
+                return
+            }
 			
-			retryCount = 0
+            retryCount = 0
 			
-			if fromFriendsScreen && User.shared?.isPremium == true {
-				(UIApplication.shared.connectedScenes.first?.delegate as! SceneDelegate).cache.loadFriends { [weak self] result in
-					DispatchQueue.mainAsyncIfNeeded {
-						switch result {
-						case let .success(items):
-							self?.items = items
-							self?.tableView.reloadData()
+            if fromFriendsScreen, User.shared?.isPremium == true {
+                (UIApplication.shared.connectedScenes.first?.delegate as! SceneDelegate).cache.loadFriends { [weak self] result in
+                    DispatchQueue.mainAsyncIfNeeded {
+                        switch result {
+                        case let .success(items):
+                            self?.items = items
+                            self?.tableView.reloadData()
 							
-						case let .failure(error):
-							let alert = UIAlertController(title: "Error", message: error.localizedDescription, preferredStyle: .alert)
-							alert.addAction(UIAlertAction(title: "Ok", style: .default))
-							self?.presenterVC.present(alert, animated: true)
-						}
-						self?.refreshControl?.endRefreshing()
-					}
-				}
-			} else {
-				let alert = UIAlertController(title: "Error", message: error.localizedDescription, preferredStyle: .alert)
-				alert.addAction(UIAlertAction(title: "Ok", style: .default))
-				self.presenterVC.present(alert, animated: true)
-				self.refreshControl?.endRefreshing()
-			}
-		}
-	}
+                        case let .failure(error):
+                            let alert = UIAlertController(title: "Error", message: error.localizedDescription, preferredStyle: .alert)
+                            alert.addAction(UIAlertAction(title: "Ok", style: .default))
+                            self?.presenterVC.present(alert, animated: true)
+                        }
+                        self?.refreshControl?.endRefreshing()
+                    }
+                }
+            } else {
+                let alert = UIAlertController(title: "Error", message: error.localizedDescription, preferredStyle: .alert)
+                alert.addAction(UIAlertAction(title: "Ok", style: .default))
+                presenterVC.present(alert, animated: true)
+                refreshControl?.endRefreshing()
+            }
+        }
+    }
 	
-	override func numberOfSections(in tableView: UITableView) -> Int {
-		1
-	}
+    override func numberOfSections(in tableView: UITableView) -> Int {
+        1
+    }
 	
-	override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-		items.count
-	}
+    override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
+        items.count
+    }
 	
-	override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
-		let item = items[indexPath.row]
-		let cell = tableView.dequeueReusableCell(withIdentifier: "ItemCell") ?? UITableViewCell(style: .subtitle, reuseIdentifier: "ItemCell")
-		cell.configure(item, longDateStyle: longDateStyle)
-		return cell
-	}
+    override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
+        let item = items[indexPath.row]
+        let cell = tableView.dequeueReusableCell(withIdentifier: "ItemCell") ?? UITableViewCell(style: .subtitle, reuseIdentifier: "ItemCell")
+        let vm = ItemViewModel(item, longDateStyle: longDateStyle)
+        cell.textLabel?.text = vm.title
+        cell.detailTextLabel?.text = vm.subtitle
+        return cell
+    }
 	
-	override func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
-		let item = items[indexPath.row]
-		if let friend = item as? Friend {
-			let vc = FriendDetailsViewController()
-			vc.friend = friend
-			navigationController?.pushViewController(vc, animated: true)
-		} else if let card = item as? Card {
-			let vc = CardDetailsViewController()
-			vc.card = card
-			navigationController?.pushViewController(vc, animated: true)
-		} else if let transfer = item as? Transfer {
-			let vc = TransferDetailsViewController()
-			vc.transfer = transfer
-			navigationController?.pushViewController(vc, animated: true)
-		} else {
-			fatalError("unknown item: \(item)")
-		}
-	}
+    override func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
+        let item = items[indexPath.row]
+        if let friend = item as? Friend {
+            let vc = FriendDetailsViewController()
+            vc.friend = friend
+            show(vc, sender: self)
+        } else if let card = item as? Card {
+            let vc = CardDetailsViewController()
+            vc.card = card
+            show(vc, sender: self)
+        } else if let transfer = item as? Transfer {
+            let vc = TransferDetailsViewController()
+            vc.transfer = transfer
+            show(vc, sender: self)
+        } else {
+            fatalError("unknown item: \(item)")
+        }
+    }
 	
-	@objc func addCard() {
-		navigationController?.pushViewController(AddCardViewController(), animated: true)
-	}
+    @objc func addCard() {
+        show(AddCardViewController(), sender: self)
+    }
 	
-	@objc func addFriend() {
-		navigationController?.pushViewController(AddFriendViewController(), animated: true)
-	}
+    @objc func addFriend() {
+        show(AddFriendViewController(), sender: self)
+    }
 	
-	@objc func sendMoney() {
-		navigationController?.pushViewController(SendMoneyViewController(), animated: true)
-	}
+    @objc func sendMoney() {
+        show(SendMoneyViewController(), sender: self)
+    }
 	
-	@objc func requestMoney() {
-		navigationController?.pushViewController(RequestMoneyViewController(), animated: true)
-	}
+    @objc func requestMoney() {
+        show(RequestMoneyViewController(), sender: self)
+    }
 }
 
+struct ItemViewModel {
+    let title: String
+    let subtitle: String
+}
 
+extension ItemViewModel {
+    init(_ item: Any, longDateStyle: Bool) {
+        if let friend = item as? Friend {
+            title = friend.name
+            subtitle = friend.phone
+        } else if let card = item as? Card {
+            title = card.number
+            subtitle = card.holder
+        } else if let transfer = item as? Transfer {
+            let numberFormatter = Formatters.number
+            numberFormatter.numberStyle = .currency
+            numberFormatter.currencyCode = transfer.currencyCode
+        
+            let amount = numberFormatter.string(from: transfer.amount as NSNumber)!
+            title = "\(amount) • \(transfer.description)"
+        
+            let dateFormatter = Formatters.date
+            if longDateStyle {
+                dateFormatter.dateStyle = .long
+                dateFormatter.timeStyle = .short
+                subtitle = "Sent to: \(transfer.recipient) on \(dateFormatter.string(from: transfer.date))"
+            } else {
+                dateFormatter.dateStyle = .short
+                dateFormatter.timeStyle = .short
+                subtitle = "Received from: \(transfer.sender) on \(dateFormatter.string(from: transfer.date))"
+            }
+        } else {
+            fatalError()
+        }
+    }
+}
 
+extension ItemViewModel {
+    init(_ item: Friend) {
+        title = item.name
+        subtitle = item.phone
+    }
+}
 
-extension UITableViewCell {
-	func configure(_ item: Any, longDateStyle: Bool) {
-		if let friend = item as? Friend {
-			textLabel?.text = friend.name
-			detailTextLabel?.text = friend.phone
-		} else if let card = item as? Card {
-			textLabel?.text = card.number
-			detailTextLabel?.text = card.holder
-		} else if let transfer = item as? Transfer {
-			let numberFormatter = Formatters.number
-			numberFormatter.numberStyle = .currency
-			numberFormatter.currencyCode = transfer.currencyCode
-			
-			let amount = numberFormatter.string(from: transfer.amount as NSNumber)!
-			textLabel?.text = "\(amount) • \(transfer.description)"
-			
-			let dateFormatter = Formatters.date
-			if longDateStyle {
-				dateFormatter.dateStyle = .long
-				dateFormatter.timeStyle = .short
-				detailTextLabel?.text = "Sent to: \(transfer.recipient) on \(dateFormatter.string(from: transfer.date))"
-			} else {
-				dateFormatter.dateStyle = .short
-				dateFormatter.timeStyle = .short
-				detailTextLabel?.text = "Received from: \(transfer.sender) on \(dateFormatter.string(from: transfer.date))"
-			}
-		} else {
-			fatalError("unknown item: \(item)")
-		}
-	}
+extension ItemViewModel {
+    init(_ item: Card) {
+        title = item.number
+        subtitle = item.holder
+    }
+}
+
+extension ItemViewModel {
+    init(_ item: Transfer, longDateStyle: Bool) {
+        let numberFormatter = Formatters.number
+        numberFormatter.numberStyle = .currency
+        numberFormatter.currencyCode = item.currencyCode
+        
+        let amount = numberFormatter.string(from: item.amount as NSNumber)!
+        title = "\(amount) • \(item.description)"
+        
+        let dateFormatter = Formatters.date
+        if longDateStyle {
+            dateFormatter.dateStyle = .long
+            dateFormatter.timeStyle = .short
+            subtitle = "Sent to: \(item.recipient) on \(dateFormatter.string(from: item.date))"
+        } else {
+            dateFormatter.dateStyle = .short
+            dateFormatter.timeStyle = .short
+            subtitle = "Received from: \(item.sender) on \(dateFormatter.string(from: item.date))"
+        }
+    }
 }
