@@ -5,7 +5,6 @@
 import UIKit
 
 class MainTabBarController: UITabBarController {
-    
     private var friendsCache: FriendsCache!
     convenience init(friendsCache: FriendsCache) {
         self.init(nibName: nil, bundle: nil)
@@ -86,7 +85,16 @@ class MainTabBarController: UITabBarController {
 	
     private func makeCardsList() -> ListViewController {
         let vc = ListViewController()
+        vc.shouldRetry = false
+        vc.title = "Cards"
+        vc.navigationItem.rightBarButtonItem = UIBarButtonItem(barButtonSystemItem: .add, target: vc, action: #selector(addCard))
         vc.fromCardsScreen = true
+        vc.service = CardsAPIItemsServiceAdapter(
+            api: CardAPI.shared,
+            select: { [weak vc] item in
+                vc?.select(card: item)
+            }
+        )
         return vc
     }
 }
@@ -109,13 +117,22 @@ struct FriendsAPIItemsServiceAdapter: ItemsService {
     }
 }
 
-
 class NullFriendsCache: FriendsCache {
     override func save(_ newFriends: [Friend]) {}
 }
-//
-//struct CardsAPIItemsServiceAdapter: ItemsService {
-//    func loadItems(completion: @escaping (Result<[ItemViewModel], Error>) -> Void) {
-//        <#code#>
-//    }
-//}
+
+struct CardsAPIItemsServiceAdapter: ItemsService {
+    let api: CardAPI
+    let select: (Card) -> Void
+    func loadItems(completion: @escaping (Result<[ItemViewModel], Error>) -> Void) {
+        api.loadCards { result in
+            DispatchQueue.mainAsyncIfNeeded {
+                completion(result.map { items in
+                    items.map { item in
+                        ItemViewModel(card: item) { select(item) }
+                    }
+                })
+            }
+        }
+    }
+}
