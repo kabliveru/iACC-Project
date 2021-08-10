@@ -19,7 +19,7 @@ class MainTabBarController: UITabBarController {
             makeNav(for: makeCardsList(), title: "Cards", icon: "creditcard.fill")
         ]
     }
-	
+
     private func makeNav(for vc: UIViewController, title: String, icon: String) -> UIViewController {
         vc.navigationItem.largeTitleDisplayMode = .always
         let nav = UINavigationController(rootViewController: vc)
@@ -31,16 +31,16 @@ class MainTabBarController: UITabBarController {
         nav.navigationBar.prefersLargeTitles = true
         return nav
     }
-	
+
     private func makeTransfersList() -> UIViewController {
         let sent = makeSentTransfersList()
         sent.navigationItem.title = "Sent"
         sent.navigationItem.largeTitleDisplayMode = .always
-		
+
         let received = makeReceivedTransfersList()
         received.navigationItem.title = "Received"
         received.navigationItem.largeTitleDisplayMode = .always
-		
+
         let vc = SegmentNavigationViewController(first: sent, second: received)
         vc.tabBarItem.image = UIImage(
             systemName: "arrow.left.arrow.right",
@@ -50,7 +50,7 @@ class MainTabBarController: UITabBarController {
         vc.navigationBar.prefersLargeTitles = true
         return vc
     }
-	
+
     private func makeFriendsList() -> ListViewController {
         let isPremium = User.shared?.isPremium == true
         let vc = ListViewController()
@@ -70,25 +70,43 @@ class MainTabBarController: UITabBarController {
         )
         return vc
     }
-	
+
     private func makeSentTransfersList() -> ListViewController {
         let vc = ListViewController()
-        vc.fromSentTransfersScreen = true
+        vc.shouldRetry = true
+        vc.maxRetryCount = 1
+        vc.navigationItem.title = "Sent"
+        vc.navigationItem.rightBarButtonItem = UIBarButtonItem(title: "Send", style: .done, target: vc, action: #selector(sendMoney))
+        vc.service = SentTransfersAPIItemsServiceAdapter(
+            api: TransfersAPI.shared,
+            select: { item in
+                vc.select(transfer: item)
+            }
+        )
         return vc
     }
-	
+
     private func makeReceivedTransfersList() -> ListViewController {
         let vc = ListViewController()
-        vc.fromReceivedTransfersScreen = true
+        vc.shouldRetry = true
+        vc.maxRetryCount = 1
+        vc.navigationItem.title = "Received"
+        vc.navigationItem.rightBarButtonItem = UIBarButtonItem(title: "Request", style: .done, target: vc, action: #selector(requestMoney))
+        vc.service = ReceivedTransfersAPIItemsServiceAdapter(
+            api: TransfersAPI.shared,
+            select: { item in
+                vc.select(transfer: item)
+            }
+        )
+
         return vc
     }
-	
+
     private func makeCardsList() -> ListViewController {
         let vc = ListViewController()
         vc.shouldRetry = false
         vc.title = "Cards"
         vc.navigationItem.rightBarButtonItem = UIBarButtonItem(barButtonSystemItem: .add, target: vc, action: #selector(addCard))
-        vc.fromCardsScreen = true
         vc.service = CardsAPIItemsServiceAdapter(
             api: CardAPI.shared,
             select: { [weak vc] item in
@@ -131,6 +149,47 @@ struct CardsAPIItemsServiceAdapter: ItemsService {
                     items.map { item in
                         ItemViewModel(card: item) { select(item) }
                     }
+                })
+            }
+        }
+    }
+}
+
+struct ReceivedTransfersAPIItemsServiceAdapter: ItemsService {
+    let api: TransfersAPI
+    let select: (Transfer) -> Void
+    func loadItems(completion: @escaping (Result<[ItemViewModel], Error>) -> Void) {
+        api.loadTransfers { result in
+            DispatchQueue.mainAsyncIfNeeded {
+                completion(result.map { items in
+                    items
+                        .filter { !$0.isSender }
+                        .map { item in
+                            ItemViewModel(transfer: item, longDateStyle: false) {
+                                select(item)
+                            }
+                        }
+                })
+            }
+        }
+    }
+}
+
+
+struct SentTransfersAPIItemsServiceAdapter: ItemsService {
+    let api: TransfersAPI
+    let select: (Transfer) -> Void
+    func loadItems(completion: @escaping (Result<[ItemViewModel], Error>) -> Void) {
+        api.loadTransfers { result in
+            DispatchQueue.mainAsyncIfNeeded {
+                completion(result.map { items in
+                    items
+                        .filter { $0.isSender }
+                        .map { item in
+                            ItemViewModel(transfer: item, longDateStyle: true) {
+                                select(item)
+                            }
+                        }
                 })
             }
         }

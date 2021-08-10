@@ -16,31 +16,14 @@ class ListViewController: UITableViewController {
     var retryCount = 0
     var maxRetryCount = 0
     var shouldRetry = false
-	
-    var longDateStyle = false
-	
-    var fromReceivedTransfersScreen = false
-    var fromSentTransfersScreen = false
-    var fromCardsScreen = false
+		
     var fromFriendsScreen = false
 	
     override func viewDidLoad() {
         super.viewDidLoad()
         refreshControl = UIRefreshControl()
         refreshControl?.addTarget(self, action: #selector(refresh), for: .valueChanged)
-        if fromSentTransfersScreen {
-            shouldRetry = true
-            maxRetryCount = 1
-            longDateStyle = true
-            navigationItem.title = "Sent"
-            navigationItem.rightBarButtonItem = UIBarButtonItem(title: "Send", style: .done, target: self, action: #selector(sendMoney))
-        } else if fromReceivedTransfersScreen {
-            shouldRetry = true
-            maxRetryCount = 1
-            longDateStyle = false
-            navigationItem.title = "Received"
-            navigationItem.rightBarButtonItem = UIBarButtonItem(title: "Request", style: .done, target: self, action: #selector(requestMoney))
-        }
+
     }
 	
     override func viewWillAppear(_ animated: Bool) {
@@ -52,25 +35,7 @@ class ListViewController: UITableViewController {
 	
     @objc private func refresh() {
         refreshControl?.beginRefreshing()
-        if fromCardsScreen ||  fromFriendsScreen {
             service?.loadItems(completion: handleAPIResult)
-        } else if fromSentTransfersScreen || fromReceivedTransfersScreen {
-            TransfersAPI.shared.loadTransfers { [weak self, longDateStyle, fromSentTransfersScreen] result in
-                DispatchQueue.mainAsyncIfNeeded {
-                    self?.handleAPIResult(result.map { items in
-                        items
-                            .filter { fromSentTransfersScreen ? $0.isSender : !$0.isSender }
-                            .map { item in
-                                ItemViewModel(transfer: item, longDateStyle: longDateStyle) {
-                                    self?.select(transfer: item)
-                                }
-                            }
-                    })
-                }
-            }
-        } else {
-            fatalError("unknown context")
-        }
     }
 	
     private func handleAPIResult(_ result: Result<[ItemViewModel], Error>) {
