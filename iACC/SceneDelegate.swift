@@ -12,11 +12,11 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
 		guard let windowScene = scene as? UIWindowScene else { return }
 		
 		window = UIWindow(windowScene: windowScene)
-		window?.rootViewController = makeRootViewController()
+        window?.rootViewController = makeRootViewController()
 		window?.makeKeyAndVisible()
 	}
 	
 	func makeRootViewController() -> MainTabBarController {
-		MainTabBarController()
+		MainTabBarController(friendsCache: cache)
 	}
 }
