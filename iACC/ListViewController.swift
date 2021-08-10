@@ -5,7 +5,7 @@
 import UIKit
 
 class ListViewController: UITableViewController {
-    var items = [Any]()
+    var items = [ItemViewModel]()
 	
     var retryCount = 0
     var maxRetryCount = 0
@@ -70,19 +70,43 @@ class ListViewController: UITableViewController {
         if fromFriendsScreen {
             FriendsAPI.shared.loadFriends { [weak self] result in
                 DispatchQueue.mainAsyncIfNeeded {
-                    self?.handleAPIResult(result)
+                    self?.handleAPIResult(result.map { items in
+                        if User.shared?.isPremium == true {
+                            (UIApplication.shared.connectedScenes.first?.delegate as! SceneDelegate).cache.save(items)
+                        }
+                        return items.map { item in
+                            ItemViewModel(friend: item) {
+                                self?.select(friend: item)
+                            }
+                        }
+                    })
                 }
             }
         } else if fromCardsScreen {
             CardAPI.shared.loadCards { [weak self] result in
                 DispatchQueue.mainAsyncIfNeeded {
-                    self?.handleAPIResult(result)
+                    self?.handleAPIResult(result.map { items in
+                        items
+                            .map { item in
+                                ItemViewModel(card: item) {
+                                    self?.select(card: item)
+                                }
+                            }
+                    })
                 }
             }
         } else if fromSentTransfersScreen || fromReceivedTransfersScreen {
-            TransfersAPI.shared.loadTransfers { [weak self] result in
+            TransfersAPI.shared.loadTransfers { [weak self, longDateStyle, fromSentTransfersScreen] result in
                 DispatchQueue.mainAsyncIfNeeded {
-                    self?.handleAPIResult(result)
+                    self?.handleAPIResult(result.map { items in
+                        items
+                            .filter { fromSentTransfersScreen ? $0.isSender : !$0.isSender }
+                            .map { item in
+                                ItemViewModel(transfer: item, longDateStyle: longDateStyle) {
+                                    self?.select(transfer: item)
+                                }
+                            }
+                    })
                 }
             }
         } else {
@@ -90,24 +114,11 @@ class ListViewController: UITableViewController {
         }
     }
 	
-    private func handleAPIResult<T>(_ result: Result<[T], Error>) {
+    private func handleAPIResult(_ result: Result<[ItemViewModel], Error>) {
         switch result {
         case let .success(items):
-            if fromFriendsScreen, User.shared?.isPremium == true {
-                (UIApplication.shared.connectedScenes.first?.delegate as! SceneDelegate).cache.save(items as! [Friend])
-            }
             retryCount = 0
-			
-            var filteredItems = items as [Any]
-            if let transfers = items as? [Transfer] {
-                if fromSentTransfersScreen {
-                    filteredItems = transfers.filter(\.isSender)
-                } else {
-                    filteredItems = transfers.filter { !$0.isSender }
-                }
-            }
-			
-            self.items = filteredItems
+            self.items = items
             refreshControl?.endRefreshing()
             tableView.reloadData()
 			
@@ -126,7 +137,11 @@ class ListViewController: UITableViewController {
                     DispatchQueue.mainAsyncIfNeeded {
                         switch result {
                         case let .success(items):
-                            self?.items = items
+                            self?.items = items.map { item in
+                                ItemViewModel(friend: item) { [weak self] in
+                                    self?.select(friend: item)
+                                }
+                            }
                             self?.tableView.reloadData()
 							
                         case let .failure(error):
@@ -153,38 +168,30 @@ class ListViewController: UITableViewController {
     override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
         let item = items[indexPath.row]
         let cell = tableView.dequeueReusableCell(withIdentifier: "ItemCell") ?? UITableViewCell(style: .subtitle, reuseIdentifier: "ItemCell")
-        let vm = ItemViewModel(item, longDateStyle: longDateStyle)
-        cell.configure(vm)
+        cell.configure(item)
         return cell
     }
 	
     override func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
         let item = items[indexPath.row]
-        if let friend = item as? Friend {
-            select(friend: friend)
-        } else if let card = item as? Card {
-            select(card: card)
-        } else if let transfer = item as? Transfer {
-            select(transfer: transfer)
-        } else {
-            fatalError("unknown item: \(item)")
-        }
+        item.select()
     }
 }
 
 struct ItemViewModel {
     let title: String
     let subtitle: String
+    let select: () -> Void
 }
 
 extension ItemViewModel {
-    init(_ item: Any, longDateStyle: Bool) {
+    init(item: Any, longDateStyle: Bool, selection: @escaping () -> Void) {
         if let friend = item as? Friend {
-            self.init(friend)
+            self.init(friend: friend, selection: selection)
         } else if let card = item as? Card {
-            self.init(card)
+            self.init(card: card, selection: selection)
         } else if let transfer = item as? Transfer {
-            self.init(transfer, longDateStyle: longDateStyle)
+            self.init(transfer: transfer, longDateStyle: longDateStyle, selection: selection)
         } else {
             fatalError()
         }
@@ -192,38 +199,41 @@ extension ItemViewModel {
 }
 
 extension ItemViewModel {
-    init(_ item: Friend) {
-        title = item.name
-        subtitle = item.phone
+    init(friend: Friend, selection: @escaping () -> Void) {
+        title = friend.name
+        subtitle = friend.phone
+        select = selection
     }
 }
 
 extension ItemViewModel {
-    init(_ item: Card) {
-        title = item.number
-        subtitle = item.holder
+    init(card: Card, selection: @escaping () -> Void) {
+        title = card.number
+        subtitle = card.holder
+        select = selection
     }
 }
 
 extension ItemViewModel {
-    init(_ item: Transfer, longDateStyle: Bool) {
+    init(transfer: Transfer, longDateStyle: Bool, selection: @escaping () -> Void) {
         let numberFormatter = Formatters.number
         numberFormatter.numberStyle = .currency
-        numberFormatter.currencyCode = item.currencyCode
+        numberFormatter.currencyCode = transfer.currencyCode
         
-        let amount = numberFormatter.string(from: item.amount as NSNumber)!
-        title = "\(amount) • \(item.description)"
+        let amount = numberFormatter.string(from: transfer.amount as NSNumber)!
+        title = "\(amount) • \(transfer.description)"
         
         let dateFormatter = Formatters.date
         if longDateStyle {
             dateFormatter.dateStyle = .long
             dateFormatter.timeStyle = .short
-            subtitle = "Sent to: \(item.recipient) on \(dateFormatter.string(from: item.date))"
+            subtitle = "Sent to: \(transfer.recipient) on \(dateFormatter.string(from: transfer.date))"
         } else {
             dateFormatter.dateStyle = .short
             dateFormatter.timeStyle = .short
-            subtitle = "Received from: \(item.sender) on \(dateFormatter.string(from: item.date))"
+            subtitle = "Received from: \(transfer.sender) on \(dateFormatter.string(from: transfer.date))"
         }
+        select = selection
     }
 }
 
