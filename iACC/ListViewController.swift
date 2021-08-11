@@ -10,20 +10,12 @@ protocol ItemsService {
 
 class ListViewController: UITableViewController {
     var items = [ItemViewModel]()
-    
     var service: ItemsService?
-	
-    var retryCount = 0
-    var maxRetryCount = 0
-    var shouldRetry = false
-		
-    var fromFriendsScreen = false
 	
     override func viewDidLoad() {
         super.viewDidLoad()
         refreshControl = UIRefreshControl()
         refreshControl?.addTarget(self, action: #selector(refresh), for: .valueChanged)
-
     }
 	
     override func viewWillAppear(_ animated: Bool) {
@@ -35,49 +27,19 @@ class ListViewController: UITableViewController {
 	
     @objc private func refresh() {
         refreshControl?.beginRefreshing()
-            service?.loadItems(completion: handleAPIResult)
+        service?.loadItems(completion: handleAPIResult)
     }
 	
     private func handleAPIResult(_ result: Result<[ItemViewModel], Error>) {
         switch result {
         case let .success(items):
-            retryCount = 0
             self.items = items
             refreshControl?.endRefreshing()
             tableView.reloadData()
 			
         case let .failure(error):
-            if shouldRetry, retryCount < maxRetryCount {
-                retryCount += 1
-				
-                refresh()
-                return
-            }
-			
-            retryCount = 0
-			
-            if fromFriendsScreen, User.shared?.isPremium == true {
-                (UIApplication.shared.connectedScenes.first?.delegate as! SceneDelegate).cache.loadFriends { [weak self] result in
-                    DispatchQueue.mainAsyncIfNeeded {
-                        switch result {
-                        case let .success(items):
-                            self?.items = items.map { item in
-                                ItemViewModel(friend: item) { [weak self] in
-                                    self?.select(friend: item)
-                                }
-                            }
-                            self?.tableView.reloadData()
-							
-                        case let .failure(error):
-                            self?.show(error)
-                        }
-                        self?.refreshControl?.endRefreshing()
-                    }
-                }
-            } else {
-                show(error)
-                refreshControl?.endRefreshing()
-            }
+            show(error)
+            refreshControl?.endRefreshing()
         }
     }
 	
