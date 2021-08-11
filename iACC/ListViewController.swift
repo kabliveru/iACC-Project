@@ -71,20 +71,6 @@ struct ItemViewModel {
 }
 
 extension ItemViewModel {
-    init(item: Any, longDateStyle: Bool, selection: @escaping () -> Void) {
-        if let friend = item as? Friend {
-            self.init(friend: friend, selection: selection)
-        } else if let card = item as? Card {
-            self.init(card: card, selection: selection)
-        } else if let transfer = item as? Transfer {
-            self.init(transfer: transfer, longDateStyle: longDateStyle, selection: selection)
-        } else {
-            fatalError()
-        }
-    }
-}
-
-extension ItemViewModel {
     init(friend: Friend, selection: @escaping () -> Void) {
         title = friend.name
         subtitle = friend.phone
